@@ -2,9 +2,10 @@ const $=id=>document.getElementById(id);
 const scenarios=[['internet','🌐','Internet Lead'],['unsold','↩️','Unsold Follow-Up'],['cold','📞','Cold Call'],['upgrade','🚘','Customer Upgrade'],['price','💰','Price Shopper'],['marketplace','💬','Marketplace Lead'],['service','🔧','Service Upgrade'],['random','🎲','Surprise Scenario']];
 const dimensions=[['opening','Opening',15],['rapport','Rapport',15],['discovery','Needs Discovery',20],['objections','Objection Handling',20],['appointment','Appointment Setting',20],['closing','Closing',10]];
 let scenario='internet',difficulty='realistic',language='en',pc,dc,localStream,timerInterval,startTime,turns=[],items=new Map(),active=false,finishing=false;
+let authGeneration=0;
 let customerSpeaking=false,userMuted=false,unmuteDelay=null;
 function text(el,value){$(el).textContent=value}
-function show(page){for(const id of ['login','app'])$(id).hidden=id!==page}
+function show(page){authGeneration++;for(const id of ['login','app'])$(id).hidden=id!==page;document.dispatchEvent(new CustomEvent('trainer-auth',{detail:{signedIn:page==='app'}}));}
 function setPanel(id){for(const p of ['setup','call','results'])$(p).hidden=p!==id}
 function error(e){alert(typeof e==='string'?e:(e?.message||'Unexpected error'))}
 function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
@@ -21,7 +22,7 @@ function renderChoices(){$('scenarios').innerHTML=scenarios.map(([id,ico,label])
 document.querySelectorAll('[data-difficulty]').forEach(b=>b.onclick=()=>{difficulty=b.dataset.difficulty;renderChoices()});
 $('name').type='email';$('name').placeholder='Your email address';$('name').autocomplete='email';$('passcode').placeholder='Your personal password';$('passcode').autocomplete='current-password';document.querySelector('label:has(#name)').firstChild.textContent='Email address';document.querySelector('label:has(#passcode)').firstChild.textContent='Password';
 $('loginForm').onsubmit=async e=>{e.preventDefault();try{const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:$('name').value,password:$('passcode').value})});const d=await r.json();if(!r.ok)throw Error(d.error);text('userName',d.name);show('app');renderHistory()}catch(e){error(e)}};
-$('logout').onclick=async()=>{await fetch('/api/logout',{method:'POST'});if(active)await finish(false);show('login')};
+$('logout').onclick=async()=>{cleanup();items=new Map();turns=[];renderTranscript();$('loginForm').reset();show('login');try{const r=await fetch('/api/logout',{method:'POST'});if(!r.ok)throw Error('Sign-out could not be confirmed. Please retry before sharing this device.')}catch(e){error(e)}};
 function addTurn(key,speaker,line){if(!line?.trim())return;items.set(key,{speaker,text:line.trim()});renderTranscript()}
 function renderTranscript(){turns=[...items.values()];$('transcript').innerHTML=turns.map(t=>`<div class="turn"><b>${t.speaker}</b><p>${escapeHtml(t.text)}</p></div>`).join('');$('transcript').scrollTop=$('transcript').scrollHeight}
 // Echo guard: no microphone audio is sent to the AI while its voice is audible.
@@ -47,15 +48,17 @@ async function start(){if(active)return;$('start').disabled=true;items=new Map()
  const r=await fetch('/api/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sdp:pc.localDescription.sdp,scenario,difficulty,language})});if(!r.ok){const d=await r.json().catch(()=>({}));throw Error(d.error||'Voice setup failed')};const sdp=await r.text();await pc.setRemoteDescription({type:'answer',sdp});
  }catch(e){cleanup();setPanel('setup');error(e)}finally{$('start').disabled=false}}
 function cleanup(){clearInterval(timerInterval);clearTimeout(unmuteDelay);if(dc&&dc.readyState==='open')dc.close();if(pc)pc.close();if(localStream)localStream.getTracks().forEach(x=>x.stop());$('remoteAudio').srcObject=null;active=false;pc=null;dc=null;localStream=null;customerSpeaking=false;userMuted=false}
-async function finish(doScore=true){if(finishing)return;finishing=true;text('connectionStatus','Finishing call...');if(dc?.readyState==='open'){try{dc.send(JSON.stringify({type:'session.close'}))}catch{}}await new Promise(r=>setTimeout(r,1400));cleanup();if(!doScore){finishing=false;return}setPanel('results');text('totalScore','…');text('outcome','Reviewing your conversation...');$('scoreRows').innerHTML='';text('strength','');text('improvement','');text('example','');text('scoreNotes','');
- try{const r=await fetch('/api/score',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({transcript:turns,scenario,difficulty,language})});const d=await r.json();if(!r.ok)throw Error(d.error||'Scoring failed');showScore(d);if(d.save_warning)text('scoreNotes',`${d.notes} ${d.save_warning}`);await renderHistory()}catch(e){text('totalScore','—');text('outcome',e.message+'. Your call transcript is displayed during the call but not stored. Try another call.')}finally{finishing=false}}
+async function finish(doScore=true){if(finishing)return;const generation=authGeneration;finishing=true;text('connectionStatus','Finishing call...');if(dc?.readyState==='open'){try{dc.send(JSON.stringify({type:'session.close'}))}catch{}}await new Promise(r=>setTimeout(r,1400));cleanup();if(!doScore){finishing=false;return}setPanel('results');text('totalScore','…');text('outcome','Reviewing your conversation...');$('scoreRows').innerHTML='';text('strength','');text('improvement','');text('example','');text('scoreNotes','');
+ try{const r=await fetch('/api/score',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({transcript:turns,scenario,difficulty,language})});const d=await r.json();if(generation!==authGeneration)return;if(!r.ok)throw Error(d.error||'Scoring failed');showScore(d);if(d.save_warning)text('scoreNotes',`${d.notes} ${d.save_warning}`);await renderHistory()}catch(e){text('totalScore','—');text('outcome',e.message+'. Your call transcript is displayed during the call but not stored. Try another call.')}finally{finishing=false}}
 function showScore(d){text('totalScore',d.total);text('outcome',d.outcome);$('scoreRows').innerHTML=dimensions.map(([key,label,max])=>`<div class="scoreLine"><div class="scoreTitle"><span>${label}</span><b>${d.scores[key]} / ${max}</b></div><div class="bar"><div style="width:${100*d.scores[key]/max}%"></div></div></div>`).join('');text('strength',d.strength);text('improvement',d.improvement);text('example',d.example);text('scoreNotes',d.notes)}
 async function renderHistory(){
+ const generation=authGeneration;
  $('history').textContent='Loading your personal history...';
- try{const r=await fetch('/api/history');if(!r.ok)throw Error('History temporarily unavailable');const history=await r.json();
+ try{const r=await fetch('/api/history');if(!r.ok)throw Error('History temporarily unavailable');const history=await r.json();if(generation!==authGeneration)return;
  $('history').innerHTML=history.length?history.map(h=>`<div class="historyItem"><div>${escapeHtml(scenarios.find(x=>x[0]===h.scenario)?.[2]||h.scenario)}<small>${new Date(h.created_at).toLocaleDateString()} · ${escapeHtml(h.difficulty)} · ${h.language==='es'?'Español':'English'}</small></div><b>${Number(h.total_score)}/100</b></div>`).join(''):'<p>No saved calls yet. Start your first practice session.</p>';
- }catch(e){$('history').textContent=e.message}
+ }catch(e){if(generation===authGeneration)$('history').textContent=e.message}
 }
 $('start').onclick=start;$('end').onclick=()=>finish(true);$('again').onclick=()=>setPanel('setup');$('mute').onclick=()=>{userMuted=!userMuted;text('mute',userMuted?'Unmute mic':'Mute mic');applyMicState()};
 (async()=>{try{const r=await fetch('/api/me');if(r.ok){const d=await r.json();text('userName',d.name);show('app');renderHistory()}else show('login')}catch{show('login')}})();renderChoices();addLanguagePicker();
 import './text-hub.js';
+import './objection-hub.js';

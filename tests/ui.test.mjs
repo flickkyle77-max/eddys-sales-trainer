@@ -1,0 +1,38 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import {JSDOM} from 'jsdom';
+import {createObjectionService,rubric} from '../objections.mjs';
+const html=await fs.readFile(new URL('../public/index.html',import.meta.url),'utf8');
+const source=await Promise.all(['text-hub.js','objection-hub.js','app.js'].map(p=>fs.readFile(new URL('../public/'+p,import.meta.url),'utf8')));
+const tick=()=>new Promise(r=>setImmediate(r));
+async function setup(){
+ const dom=new JSDOM(html,{url:'https://trainer.test',runScripts:'outside-only',pretendToBeVisual:true});const w=dom.window;const records=[];let user='a',failPath='',hold=null;
+ w.HTMLElement.prototype.scrollIntoView=function(){};w.alert=()=>{};w.confirm=()=>true;
+ const service=createObjectionService({secret:'ui-test-only',async ai(instructions,payload,schema){if(schema.properties.reply)return {reply:payload.language==='es'?'Quiero comparar el precio total.':'I want to compare total prices.'};if(schema.properties.assessment)return {assessment:'Listen first.',question:'Which offer?',suggestion:'Which offer are you comparing?',reason:'Find the concern.'};return {scores:Object.fromEntries(Object.keys(rubric).map(k=>[k,5])),feedback:Object.fromEntries(Object.keys(rubric).map(k=>[k,{evidence:'You asked a question.',advice:'Explore further.'}])),outcome:'No appointment yet.',strength:'Listened.',improvement:'Explore.',example:'What matters most?',real_concern:'Price comparison.',next_drill:'Compare offers.'};},async save(r){records.push({...r,created_at:new Date().toISOString()});},async find(id){return records.find(r=>r.id===id);}});
+ w.fetch=async(url,options={})=>{const path=String(url);if(hold&&path===hold.path)return hold.promise;if(path===failPath)return {ok:false,json:async()=>({error:'Temporary test failure'})};const body=options.body?JSON.parse(options.body):{};let value;
+ if(path==='/api/me')value={name:user+'@example.test'};
+ else if(path==='/api/login'){user=body.email;value={name:body.email};}
+ else if(path==='/api/logout')value={ok:true};
+ else if(path==='/api/history')value=[];
+ else if(path==='/api/text/history')value=records.filter(r=>r.user_id===user);
+ else if(path==='/api/text/reply')value={reply:'What is the price?'};
+ else if(path==='/api/text/finish')value={scores:{tone:10},total:10,outcome:'Done',strength:'Hi',improvement:'Ask',example:'Hello'};
+ else if(path.startsWith('/api/objections/')){const action=path.split('/').at(-1);value=action==='catalog'?service.catalog():await service[{save:'retrySave'}[action]||action](user,body);}
+ else throw Error('Unexpected request '+path);
+ return {ok:true,json:async()=>value};};
+ const hub=source[0].replaceAll('export ','');w.eval('(function(){'+hub+';window.__hub={switchArea,registerTrainingArea};})()');
+ w.eval('(function(){const {registerTrainingArea,switchArea}=window.__hub;'+source[1].replace(/^import .*;\n/,'')+'})()');
+ w.eval('(function(){'+source[2].replace(/^import .*;$/gm,'')+'})()');await tick();await tick();
+ const $=id=>w.document.getElementById(id);const click=async id=>{const result=$(id).onclick?.();await result;await tick();};
+ return {dom,w,$,click,records,set fail(v){failPath=v;},set hold(v){hold=v;}};
+}
+test('hub shows after login; Phone Training reveals setup only',async t=>{const f=await setup();t.after(()=>f.dom.window.close());assert.equal(f.$('hubHome').hidden,false);await f.click('hubGoPhone');assert.equal(f.$('setup').hidden,false);assert.equal(f.$('call').hidden,true);assert.equal(f.$('results').hidden,true);assert.equal(f.$('logout').closest('.intro'),null);});
+test('Objection Lab loads all twelve topics and keeps account controls visible',async t=>{const f=await setup();t.after(()=>f.dom.window.close());await f.click('hubGoObjection');assert.equal(f.$('objectionLab').hidden,false);assert.equal(f.$('obTopic').options.length,13);assert.equal(f.$('obStart').disabled,false);assert.equal(f.$('setup').hidden,true);});
+test('Spanish progressive coached drill completes and appears in history',async t=>{const f=await setup();t.after(()=>f.dom.window.close());await f.click('hubGoObjection');f.$('obLanguage').value='es';f.$('obChallenge').value='progressive';f.$('obMode').value='coaching';await f.click('obStart');assert.match(f.$('obMessages').textContent,/precio/);assert.equal(f.$('obCoach').hidden,false);f.$('obDraft').value='Entiendo, ¿con qué precio lo está comparando?';await f.click('obCoach');assert.equal(f.$('obCoachResult').hidden,false);await f.click('obSend');assert.match(f.$('obProgress').textContent,/1 \/ 12/);await f.click('obFinish');assert.match(f.$('obStatus').textContent,/saved/);assert.equal(f.records.length,1);assert.equal(f.records[0].mode,'coaching');assert.match(f.$('obHistory').textContent,/Coached/);assert.equal(f.$('obReview').hidden,false);});
+test('failed reply preserves draft, conversation, and visible error for retry',async t=>{const f=await setup();t.after(()=>f.dom.window.close());await f.click('hubGoObjection');await f.click('obStart');f.$('obDraft').value='Tell me more.';f.fail='/api/objections/reply';await f.click('obSend');assert.match(f.$('obStatus').textContent,/Temporary/);assert.equal(f.$('obDraft').value,'Tell me more.');assert.match(f.$('obProgress').textContent,/0 \/ 12/);assert.equal(f.$('obSend').disabled,false);f.fail='';await f.click('obSend');assert.match(f.$('obProgress').textContent,/1 \/ 12/);});
+test('failed scoring keeps End & Score available',async t=>{const f=await setup();t.after(()=>f.dom.window.close());await f.click('hubGoObjection');await f.click('obStart');f.$('obDraft').value='What are you comparing?';await f.click('obSend');f.fail='/api/objections/finish';await f.click('obFinish');assert.match(f.$('obStatus').textContent,/Temporary/);assert.equal(f.$('obFinish').disabled,false);f.fail='';await f.click('obFinish');assert.equal(f.$('obReview').hidden,false);});
+test('legacy text errors persist and failed scoring can retry',async t=>{const f=await setup();t.after(()=>f.dom.window.close());await f.click('hubGoText');await f.click('hubStart');f.$('hubDraft').value='Hi';await f.click('hubSend');f.fail='/api/text/finish';await f.click('hubFinish');assert.match(f.$('hubStatus').textContent,/Temporary/);assert.equal(f.$('hubFinish').disabled,false);});
+test('logout clears objection transcripts, drafts, reviews, and history',async t=>{const f=await setup();t.after(()=>f.dom.window.close());await f.click('hubGoObjection');await f.click('obStart');f.$('obDraft').value='Private unfinished draft';await f.click('logout');assert.equal(f.$('obMessages').textContent,'');assert.equal(f.$('obDraft').value,'');assert.equal(f.$('obHistory').textContent,'');assert.equal(f.$('app').hidden,true);});
+test('late objection response cannot repopulate a signed-out screen',async t=>{const f=await setup();t.after(()=>f.dom.window.close());await f.click('hubGoObjection');await f.click('obStart');let release;const promise=new Promise(r=>release=r);f.hold={path:'/api/objections/reply',promise};f.$('obDraft').value='Question';const pending=f.click('obSend');await tick();await f.click('logout');release({ok:true,json:async()=>({messages:[{role:'customer',text:'Previous employee secret'}]})});await pending;assert.equal(f.$('obMessages').textContent,'');assert.equal(f.$('obDraft').value,'');});
+test('transcript HTML is escaped',async t=>{const f=await setup();t.after(()=>f.dom.window.close());await f.click('hubGoObjection');await f.click('obStart');f.$('obDraft').value='<img src=x onerror=alert(1)>';await f.click('obSend');assert.equal(f.$('obMessages').querySelector('img'),null);assert.match(f.$('obMessages').textContent,/<img/);});
