@@ -1,36 +1,34 @@
-# Eddy's Sales Call Trainer — private dealership MVP
+# Eddy's Sales Training Hub
 
-A phone-friendly website with a live AI customer using OpenAI Realtime WebRTC, followed by AI scoring of a transcribed sales call. It includes eight call types, three difficulty levels, and local score history.
+Employee training with fictional customers: live Phone Training, Text Training, and Objection Lab. Employees sign in through Supabase Auth. Scores and reviews are saved to each employee's Supabase history.
 
-## Local setup
+## Objection Lab
 
-1. Install Node.js 20 or newer.
-2. Run `npm install` in this folder.
-3. Copy `.env.example` to `.env` and configure:
-   - `OPENAI_API_KEY`: your API key from OpenAI Platform (separate API billing required).
-   - `DEALERSHIP_PASSCODE`: a long code shared only with authorized team members.
-   - `COOKIE_SECRET`: generate at least 32 random characters.
-4. Run `npm start`.
-5. Open `http://localhost:3000` on that same computer. Enter your name + dealership access code, select a scenario, allow the microphone, and begin talking.
+Twelve objections: price, monthly payment, trade value, thinking it over, spouse/partner, competitor offers, credit, time, out-the-door pricing, down payment, interest rate, and warranty concerns. Choose English or Spanish, three difficulty levels, focused or progressive challenges, and independent or coached practice. Progressive customers can reveal connected concerns after the first concern has been explored.
 
-## For coworkers on phones
+The five-part rubric totals 100: acknowledge 15, discover 25, truthful relevant response 25, trust 15, appropriate next step 20. Reviews include transcript evidence, actionable coaching, a rewritten response, the concern behind the objection, and a suggested next drill. An appointment is not required when another next step better serves the customer.
 
-Deploy the Node app on a host that supports HTTPS, such as Render, Railway, or a similar service. Set the environment variables on your host (do not publish your `.env` file). Set `NODE_ENV=production`. Use your secure HTTPS website URL on colleagues' phones. For iPhone, Safari's Share menu → Add to Home Screen.
+Drills are typed. Customer replies and coaching use OpenAI; no real customer messages are sent. All backstories and deals are fictional. Employees should not enter real customer personal or financial data.
 
-**Security before broad distribution:** the shared-code login is a simple internal pilot, not full identity management. Use hosting-level access control or implement unique accounts, revocation, password reset, session management, audit logging, stricter spend limits, CSRF protection, and server-side rate limiting backed by a shared store before general production use. Restrict deployment to dealership staff. Do not submit real customer information in practice calls.
+## Setup
 
-## What this version does / does not do
+1. Use Node.js 20 or later. Run `npm ci`.
+2. Copy `.env.example` to `.env` and set your Supabase URL/publishable key, server-side OpenAI key, and a stable random `COOKIE_SECRET`. Never commit `.env`.
+3. The existing Supabase tables `call_scores` and `text_sessions` must already be configured with RLS and employee ownership policies for SELECT and INSERT. Objection Lab reuses `text_sessions`: scenario starts with `objection_`, numeric dimensions live in `scores`, and detailed feedback is stored in `scores._review`. It does not require a schema migration for the existing Eddy's production database.
+4. Run `npm start` and visit `http://localhost:3000`. Create employee accounts through your normal Supabase administration process.
 
-- Real phone-style microphone conversation: YES, when the OpenAI Realtime API connection works and API key has access to the configured model.
-- Dynamic AI behavior per scenario and difficulty: YES.
-- Transcript and AI scorecard: YES, provided the Realtime transcription events arrive with sufficient detail.
-- Session scores saved in this browser only: YES.
-- Manager dashboards, centralized reports, individual login credentials, and call recordings: NOT YET.
-- API key stored in browser: NO. It remains on the server.
-- Actual customer calls or real inventory/price lookup: NO. Simulated calls only.
+Use HTTPS in production and `NODE_ENV=production`. Render's standard `RENDER=true` environment enables the app's one-hop reverse-proxy setting. Existing Render environment variables are sufficient for this release. `OBJECTION_SESSION_SECRET` can override `COOKIE_SECRET`; use a stable secret shared by instances. Without either, drills expire after a server restart.
 
-## Notes
+## Session and history behavior
 
-The application uses `/v1/realtime/calls` via server-side SDP exchange and `/v1/responses` to grade. Since realtime API configurations and event names can evolve, verify provider compatibility before rollout. The scoring model may make errors, and transcription can miss or mishear speech. Pilot with a few staff members and compare AI scoring against a human manager's evaluation.
+Objection backstories and transcripts are protected in encrypted, authenticated tokens bound to the employee. The server grades its protected transcript; the browser cannot relabel a coached drill as independent. Tokens expire after six hours. In-progress drills stay in the current browser page's memory and are lost if the page is closed or refreshed. Finished reviews persist in Supabase. Signing out clears training state, and late responses from the old session are ignored.
 
-The application never stores full transcripts on the server. Scoring sends the transcript to OpenAI and does not persist it in a dealership database. Browser localStorage holds score summaries only. The code has been syntax-checked but voice calling requires API credentials, a browser microphone, and network access to test end-to-end.
+There are 12 salesperson turns per objection drill. Reply failures retain the draft and conversation. Scoring failures can be retried; save failures preserve the review and offer a save-only retry. A session UUID prevents duplicate saved reviews. A short-lived in-memory cache deduplicates repeated AI requests within an instance; across restarts or multiple instances, repeated requests can still invoke the provider again, though the same saved review ID prevents duplicate database rows. Practice requests are limited per authenticated employee, with separate quotas for Objection Lab and legacy training. Independent/coached labels describe assistance provided by this app, not outside help.
+
+## Verification
+
+- `npm run check`: syntax checks for all application modules.
+- `npm test`: service, HTTP route, and DOM regression tests with synthetic data and mocked external providers. No real credentials, employee data, or paid model calls are used.
+- `node tests/preview.mjs`: local-only synthetic UI preview at `http://127.0.0.1:3417`. This is a development fixture, not the production entrypoint.
+
+Phone calls require microphone permission and a live OpenAI Realtime connection. Model behavior and transcript accuracy vary. Pilot grading with a manager and compare the feedback against the actual conversation before using scores for employee evaluations.

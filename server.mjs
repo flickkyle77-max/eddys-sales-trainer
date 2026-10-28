@@ -3,19 +3,24 @@ import express from 'express';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import crypto from 'node:crypto';
+import {createObjectionService,registerObjectionRoutes} from './objections.mjs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 const app = express();
 const root = path.dirname(fileURLToPath(import.meta.url));
 app.disable('x-powered-by');
+// Render terminates HTTPS at its reverse proxy. Keep local development unproxied.
+if(process.env.RENDER==='true')app.set('trust proxy',1);
 app.use(helmet({contentSecurityPolicy:false}));
-app.use(express.json({limit:'120kb'}));
+app.use(express.json({limit:'512kb'}));
+app.use('/api',(req,res,next)=>{res.set('Cache-Control','no-store');next();});
 app.use(express.static(path.join(root,'public'), {index:false}));
 const supabaseUrl=(process.env.SUPABASE_URL||'').replace(/\/$/,'');
 const supabaseKey=process.env.SUPABASE_PUBLISHABLE_KEY;
 if(!supabaseUrl.startsWith('https://')||!supabaseKey)console.warn('Supabase not configured: login unavailable until environment variables are present');
 const limiter=rateLimit({windowMs:15*60*1000,limit:20,standardHeaders:'draft-7',legacyHeaders:false});
-const callsLimiter=rateLimit({windowMs:60*60*1000,limit:25,standardHeaders:'draft-7',legacyHeaders:false});
+const callsLimiter=rateLimit({windowMs:60*60*1000,limit:150,keyGenerator:req=>req.userId,standardHeaders:'draft-7',legacyHeaders:false,message:{error:'Hourly practice limit reached. Please try again later.'}});
+const objectionLimiter=rateLimit({windowMs:60*60*1000,limit:120,keyGenerator:req=>req.userId,standardHeaders:'draft-7',legacyHeaders:false,message:{error:'Hourly objection practice limit reached. Please try again later.'}});
 const cookieOptions={httpOnly:true,secure:process.env.NODE_ENV==='production',sameSite:'strict',path:'/'};
 const cookie=(req,name)=>(req.headers.cookie||'').split(';').map(x=>x.trim()).find(x=>x.startsWith(name+'='))?.slice(name.length+1);
 const authHeaders=(token)=>({'apikey':supabaseKey,'Authorization':`Bearer ${token}`});
@@ -25,7 +30,7 @@ async function supabaseAuth(endpoint,method,body,token){
 }
 function saveSession(res,data){res.cookie('trainer_access',data.access_token,{...cookieOptions,maxAge:60*60*1000});res.cookie('trainer_refresh',data.refresh_token,{...cookieOptions,maxAge:30*24*60*60*1000});}
 async function requireAuth(req,res,next){
- if(!supabaseKey)return res.status(503).json({error:'Supabase configuration missing'});
+ if(!supabaseKey||!supabaseUrl)return res.status(503).json({error:'Supabase configuration missing'});
  try{
   let token=cookie(req,'trainer_access');let r=token?await supabaseAuth('user','GET',null,token):{ok:false};
   if(!r.ok){const refresh=cookie(req,'trainer_refresh');if(!refresh)return res.status(401).json({error:'Please sign in'});
@@ -48,7 +53,7 @@ app.post('/api/login',limiter,async(req,res)=>{
 app.get('/api/me',requireAuth,(req,res)=>res.json({name:req.salesperson}));
 app.post('/api/logout',async(req,res)=>{const token=cookie(req,'trainer_access');if(token)try{await supabaseAuth('logout','POST',{},token)}catch{}res.clearCookie('trainer_access',cookieOptions);res.clearCookie('trainer_refresh',cookieOptions);res.json({ok:true})});
 app.get('/api/history',requireAuth,async(req,res)=>{
- try{const r=await fetch(`${supabaseUrl}/rest/v1/call_scores?select=created_at,scenario,difficulty,language,total_score,opening,rapport,discovery,objections,appointment,closing,outcome,strength,improvement,example&order=created_at.desc&limit=30`,{headers:authHeaders(req.authToken)});
+ try{const r=await fetch(`${supabaseUrl}/rest/v1/call_scores?user_id=eq.${encodeURIComponent(req.userId)}&select=created_at,scenario,difficulty,language,total_score,opening,rapport,discovery,objections,appointment,closing,outcome,strength,improvement,example&order=created_at.desc&limit=30`,{headers:authHeaders(req.authToken)});
  if(!r.ok)throw Error(`Supabase ${r.status}`);res.json(await r.json());}catch(e){console.error(e);res.status(502).json({error:'Unable to load personal scores'})}
 });
 const scenarios={
@@ -137,10 +142,10 @@ function validatedTextInput(input){
 }
 async function textAI(instructions,payload,schema){
  if(!process.env.OPENAI_API_KEY)throw Error('OPENAI_API_KEY is not configured');
- const response=await fetch('https://api.openai.com/v1/responses',{method:'POST',headers:{Authorization:`Bearer ${process.env.OPENAI_API_KEY}`,'Content-Type':'application/json'},body:JSON.stringify({model:process.env.SCORING_MODEL||'gpt-4.1-mini',instructions,input:JSON.stringify(payload),text:{format:{type:'json_schema',name:'trainer_text',strict:true,schema}}})});
+ const response=await fetch('https://api.openai.com/v1/responses',{method:'POST',headers:{Authorization:`Bearer ${process.env.OPENAI_API_KEY}`,'Content-Type':'application/json'},body:JSON.stringify({model:process.env.SCORING_MODEL||'gpt-4.1-mini',instructions,input:JSON.stringify(payload),max_output_tokens:3000,store:false,text:{format:{type:'json_schema',name:'trainer_text',strict:true,schema}}}),signal:AbortSignal.timeout(45000)});
  const raw=await response.json();if(!response.ok)throw Error(raw.error?.message||'AI response failed');
  const output=(raw.output||[]).flatMap(x=>x.content||[]).find(x=>x.type==='output_text')?.text||raw.output_text;
- if(!output)throw Error('No AI response');return JSON.parse(output);
+ if(raw.status==='incomplete'||!output)throw Error('No complete AI response');return JSON.parse(output);
 }
 const textResultSchema={type:'object',additionalProperties:false,required:['reply'],properties:{reply:{type:'string'}}};
 app.post('/api/text/reply',requireAuth,callsLimiter,async(req,res)=>{
@@ -169,8 +174,24 @@ app.post('/api/text/finish',requireAuth,callsLimiter,async(req,res)=>{
  }catch(e){console.error('Text score:',e.message);res.status(502).json({error:'Could not complete text evaluation'})}
 });
 app.get('/api/text/history',requireAuth,async(req,res)=>{
- try{const r=await fetch(`${supabaseUrl}/rest/v1/text_sessions?select=id,created_at,scenario,difficulty,language,mode,total_score,scores,outcome,strength,improvement,example,conversation&order=created_at.desc&limit=30`,{headers:authHeaders(req.authToken)});if(!r.ok)throw Error(`Supabase ${r.status}`);res.json(await r.json())}catch(e){console.error('Text history',e);res.status(502).json({error:'Could not load text sessions'})}
+ try{const r=await fetch(`${supabaseUrl}/rest/v1/text_sessions?user_id=eq.${encodeURIComponent(req.userId)}&select=id,created_at,scenario,difficulty,language,mode,total_score,scores,outcome,strength,improvement,example,conversation&order=created_at.desc&limit=30`,{headers:authHeaders(req.authToken)});if(!r.ok)throw Error(`Supabase ${r.status}`);res.json(await r.json())}catch(e){console.error('Text history',e);res.status(502).json({error:'Could not load text sessions'})}
 });
 
+// Reuse the existing text_sessions table and its employee ownership policies.
+// No schema changes or new credentials are required for Objection Lab.
+const sessionSecret=process.env.OBJECTION_SESSION_SECRET||process.env.COOKIE_SECRET||crypto.randomBytes(32).toString('hex');
+if(!process.env.OBJECTION_SESSION_SECRET&&!process.env.COOKIE_SECRET)console.warn('Set OBJECTION_SESSION_SECRET to retain objection drills across server restarts');
+const objectionService=createObjectionService({secret:sessionSecret,ai:textAI,
+ async find(id,userId,token){
+  const r=await fetch(`${supabaseUrl}/rest/v1/text_sessions?id=eq.${id}&user_id=eq.${encodeURIComponent(userId)}&select=*&limit=1`,{headers:authHeaders(token),signal:AbortSignal.timeout(15000)});
+  if(!r.ok)throw Error('Unable to check saved review');return (await r.json())[0]||null;
+ },
+ async save(record,token){
+  const r=await fetch(`${supabaseUrl}/rest/v1/text_sessions`,{method:'POST',headers:{...authHeaders(token),'Content-Type':'application/json','Prefer':'resolution=ignore-duplicates,return=minimal'},body:JSON.stringify(record),signal:AbortSignal.timeout(15000)});
+  if(!r.ok)throw Error('Unable to save objection review');
+ }
+});
+registerObjectionRoutes(app,{requireAuth,limiter:objectionLimiter,service:objectionService});
 const port=Number(process.env.PORT)||3000;
-app.listen(port,()=>console.log(`Sales Call Trainer available at http://localhost:${port}`));
+export {app};
+if(process.argv[1]===fileURLToPath(import.meta.url))app.listen(port,()=>console.log(`Sales Call Trainer available at http://localhost:${port}`));
