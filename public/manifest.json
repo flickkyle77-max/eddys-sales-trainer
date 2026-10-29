@@ -1,1 +1,16 @@
-{"name":"Eddy's Sales Call Trainer","short_name":"Call Trainer","display":"standalone","start_url":"/","background_color":"#0b1018","theme_color":"#101722","icons":[{"src":"/icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]}
+{
+  "name": "ObjectionIQ",
+  "short_name": "ObjectionIQ",
+  "display": "standalone",
+  "start_url": "/",
+  "background_color": "#0b1018",
+  "theme_color": "#101722",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

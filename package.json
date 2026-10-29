@@ -1,6 +1,6 @@
 {
-  "name": "dealership-sales-call-trainer",
-  "version": "0.2.0",
+  "name": "objectioniq",
+  "version": "0.2.1",
   "private": true,
   "type": "module",
   "scripts": {
