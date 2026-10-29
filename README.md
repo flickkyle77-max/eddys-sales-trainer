@@ -1,4 +1,4 @@
-# Eddy's Sales Training Hub
+# ObjectionIQ
 
 Employee training with fictional customers: live Phone Training, Text Training, and Objection Lab. Employees sign in through Supabase Auth. Scores and reviews are saved to each employee's Supabase history.
 
@@ -14,7 +14,7 @@ Drills are typed. Customer replies and coaching use OpenAI; no real customer mes
 
 1. Use Node.js 20 or later. Run `npm ci`.
 2. Copy `.env.example` to `.env` and set your Supabase URL/publishable key, server-side OpenAI key, and a stable random `COOKIE_SECRET`. Never commit `.env`.
-3. The existing Supabase tables `call_scores` and `text_sessions` must already be configured with RLS and employee ownership policies for SELECT and INSERT. Objection Lab reuses `text_sessions`: scenario starts with `objection_`, numeric dimensions live in `scores`, and detailed feedback is stored in `scores._review`. It does not require a schema migration for the existing Eddy's production database.
+3. The existing Supabase tables `call_scores` and `text_sessions` must already be configured with RLS and employee ownership policies for SELECT and INSERT. Objection Lab reuses `text_sessions`: scenario starts with `objection_`, numeric dimensions live in `scores`, and detailed feedback is stored in `scores._review`. It does not require a schema migration for the existing production database.
 4. Run `npm start` and visit `http://localhost:3000`. Create employee accounts through your normal Supabase administration process.
 
 Use HTTPS in production and `NODE_ENV=production`. Render's standard `RENDER=true` environment enables the app's one-hop reverse-proxy setting. Existing Render environment variables are sufficient for this release. `OBJECTION_SESSION_SECRET` can override `COOKIE_SECRET`; use a stable secret shared by instances. Without either, drills expire after a server restart.
