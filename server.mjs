@@ -67,20 +67,21 @@ const scenarios={
  random:{label:'Random Scenario',setup:'Invent a realistic automotive retail lead situation with a plausible customer goal and hidden objection. Do not tell salesperson your secrets.'}
 };
 const difficulties={easy:'Be fairly friendly, cooperative, and open to an appointment when invited with a clear reason.',realistic:'Be a believable busy shopper. Offer moderate resistance and 1-2 natural objections, reveal information only when asked, reward good questions.',hard:'Be skeptical, short on time, and protective of details. Raise substantial but reasonable objections. Agree to next steps only when the salesperson earns trust and creates a clear reason.'};
+// Use Realtime voices; speech-only voices such as onyx/nova are not supported here.
 // Pair fictional names with voice profiles before the session starts.
 // Do not infer voice from a name; choose a matching pair as one fictional character.
 const customerProfiles = {
  en: [
-  {name:'Bill',voice:'onyx'}, {name:'Jason',voice:'ash'},
-  {name:'Michael',voice:'echo'}, {name:'David',voice:'onyx'},
+  {name:'Bill',voice:'cedar'}, {name:'Jason',voice:'ash'},
+  {name:'Michael',voice:'echo'}, {name:'David',voice:'cedar'},
   {name:'Sarah',voice:'shimmer'}, {name:'Emily',voice:'coral'},
-  {name:'Ashley',voice:'nova'}, {name:'Megan',voice:'shimmer'}
+  {name:'Ashley',voice:'marin'}, {name:'Megan',voice:'shimmer'}
  ],
  es: [
-  {name:'Carlos',voice:'onyx'}, {name:'Miguel',voice:'ash'},
-  {name:'Javier',voice:'echo'}, {name:'Diego',voice:'onyx'},
+  {name:'Carlos',voice:'cedar'}, {name:'Miguel',voice:'ash'},
+  {name:'Javier',voice:'echo'}, {name:'Diego',voice:'cedar'},
   {name:'Sofía',voice:'shimmer'}, {name:'María',voice:'coral'},
-  {name:'Lucía',voice:'nova'}, {name:'Ana',voice:'shimmer'}
+  {name:'Lucía',voice:'marin'}, {name:'Ana',voice:'shimmer'}
  ]
 };
 function pickCustomer(language) {
