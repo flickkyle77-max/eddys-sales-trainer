@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 import AVFoundation
 import ObjectionIQCore
 
@@ -30,13 +31,13 @@ struct CallScreen: View {
                 .onChange(of: scenePhase) { phase in
                     if phase == .background, call.isLive { call.stop(reason: "The call ended when ObjectionIQ moved to the background. You can score the available transcript.") }
                 }
-                .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.interruptionNotification)) { notification in
+                .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.interruptionNotification).receive(on: RunLoop.main)) { notification in
                     if let raw = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
                        AVAudioSession.InterruptionType(rawValue: raw) == .began, call.isLive {
                         call.stop(reason: "Another audio session interrupted this call. You can score the available transcript.")
                     }
                 }
-                .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.routeChangeNotification)) { _ in call.refreshAudioRoute() }
+                .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.routeChangeNotification).receive(on: RunLoop.main)) { _ in call.refreshAudioRoute() }
         }
     }
     private var liveCall: some View {

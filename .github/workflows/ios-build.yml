@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   simulator:
-    runs-on: macos-15-intel
+    runs-on: macos-15
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
@@ -30,7 +30,7 @@ jobs:
           -configuration Release -destination 'generic/platform=iOS'
           -derivedDataPath build-device CODE_SIGNING_ALLOWED=NO build
       - name: Render native screens on iPhone and iPad simulators
-        timeout-minutes: 6
+        timeout-minutes: 10
         run: |
           mkdir -p screenshots
           for DEVICE_FAMILY in iPhone iPad; do
