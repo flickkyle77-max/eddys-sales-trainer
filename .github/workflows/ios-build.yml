@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   simulator:
-    runs-on: macos-15
+    runs-on: macos-15-intel
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
@@ -24,7 +24,13 @@ jobs:
           -configuration Debug -destination 'generic/platform=iOS Simulator'
           -derivedDataPath build -resultBundlePath build/NativeBuild.xcresult
           CODE_SIGNING_ALLOWED=NO build
+      - name: Compile the Release target for physical iOS devices
+        run: >-
+          xcodebuild -project ios/ObjectionIQ.xcodeproj -scheme ObjectionIQ
+          -configuration Release -destination 'generic/platform=iOS'
+          -derivedDataPath build-device CODE_SIGNING_ALLOWED=NO build
       - name: Render native screens on iPhone and iPad simulators
+        timeout-minutes: 6
         run: |
           mkdir -p screenshots
           for DEVICE_FAMILY in iPhone iPad; do
@@ -41,11 +47,12 @@ jobs:
             xcrun simctl shutdown "$SIM_DEVICE_ID"
           done
       - name: Upload native screen previews
-        if: success()
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: native-screen-previews
           path: screenshots
+          if-no-files-found: ignore
       - name: Upload build diagnostics
         if: always()
         uses: actions/upload-artifact@v4
