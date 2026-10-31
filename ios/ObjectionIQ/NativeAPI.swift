@@ -109,6 +109,7 @@ final class NativeAPI {
         guard path.hasPrefix("/api/"), let url = URL(string: path, relativeTo: server.url)?.absoluteURL,
               server.contains(url) else { throw TrainerError.message("Invalid training endpoint.") }
         var request = URLRequest(url: url)
+        request.mainDocumentURL = server.url
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         if let body {
             request.httpMethod = "POST"

@@ -4,6 +4,8 @@
     classes = {};
     objectVersion = 56;
     objects = {
+        B00000000000000000000070 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativePreview.swift; sourceTree = "<group>"; };
+        C00000000000000000000070 = {isa = PBXBuildFile; fileRef = B00000000000000000000070; };
         D00000000000000000000001 = {isa = PBXBuildFile; productRef = D00000000000000000000003; };
         D00000000000000000000002 = {isa = XCRemoteSwiftPackageReference; repositoryURL = "https://github.com/stasel/WebRTC.git"; requirement = {kind = exactVersion; version = 154.0.0; }; };
         D00000000000000000000003 = {isa = XCSwiftPackageProductDependency; package = D00000000000000000000002; productName = WebRTC; };
@@ -29,9 +31,9 @@
         A00000000000000000000015 = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
         A00000000000000000000016 = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ObjectionIQ.app; sourceTree = BUILT_PRODUCTS_DIR; };
         A00000000000000000000021 = {isa = PBXGroup; children = (A00000000000000000000022, A00000000000000000000023); sourceTree = "<group>"; };
-        A00000000000000000000022 = {isa = PBXGroup; children = (B00000000000000000000064, A00000000000000000000011, A00000000000000000000012, A00000000000000000000013, A00000000000000000000014, A00000000000000000000015); path = ObjectionIQ; sourceTree = "<group>"; };
+        A00000000000000000000022 = {isa = PBXGroup; children = (B00000000000000000000064, B00000000000000000000065, B00000000000000000000066, B00000000000000000000067, B00000000000000000000068, B00000000000000000000070, A00000000000000000000011, A00000000000000000000012, A00000000000000000000013, A00000000000000000000014, A00000000000000000000015); path = ObjectionIQ; sourceTree = "<group>"; };
         A00000000000000000000023 = {isa = PBXGroup; children = (A00000000000000000000016); name = Products; sourceTree = "<group>"; };
-        A00000000000000000000031 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (C00000000000000000000064, A00000000000000000000001, A00000000000000000000002, A00000000000000000000003); runOnlyForDeploymentPostprocessing = 0; };
+        A00000000000000000000031 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (C00000000000000000000064, C00000000000000000000065, C00000000000000000000066, C00000000000000000000067, C00000000000000000000068, C00000000000000000000070, A00000000000000000000001, A00000000000000000000002, A00000000000000000000003); runOnlyForDeploymentPostprocessing = 0; };
         A00000000000000000000032 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (A00000000000000000000005, D00000000000000000000001); runOnlyForDeploymentPostprocessing = 0; };
         A00000000000000000000033 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (A00000000000000000000004); runOnlyForDeploymentPostprocessing = 0; };
         A00000000000000000000041 = {

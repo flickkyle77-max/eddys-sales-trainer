@@ -24,6 +24,28 @@ jobs:
           -configuration Debug -destination 'generic/platform=iOS Simulator'
           -derivedDataPath build -resultBundlePath build/NativeBuild.xcresult
           CODE_SIGNING_ALLOWED=NO build
+      - name: Render native screens on iPhone and iPad simulators
+        run: |
+          mkdir -p screenshots
+          for DEVICE_FAMILY in iPhone iPad; do
+            SIM_DEVICE_ID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; family=sys.argv[1]; print(next(d["udid"] for group in json.load(sys.stdin)["devices"].values() for d in group if d["name"].startswith(family)))' "$DEVICE_FAMILY")
+            xcrun simctl boot "$SIM_DEVICE_ID"
+            xcrun simctl bootstatus "$SIM_DEVICE_ID" -b
+            xcrun simctl status_bar "$SIM_DEVICE_ID" override --time '9:41' --batteryState charged --batteryLevel 100
+            xcrun simctl install "$SIM_DEVICE_ID" build/Build/Products/Debug-iphonesimulator/ObjectionIQ.app
+            for SCREEN in home progress setup review; do
+              xcrun simctl launch --terminate-running-process "$SIM_DEVICE_ID" com.example.ObjectionIQ "-ui-preview=$SCREEN"
+              sleep 3
+              xcrun simctl io "$SIM_DEVICE_ID" screenshot "screenshots/$DEVICE_FAMILY-$SCREEN.png"
+            done
+            xcrun simctl shutdown "$SIM_DEVICE_ID"
+          done
+      - name: Upload native screen previews
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-screen-previews
+          path: screenshots
       - name: Upload build diagnostics
         if: always()
         uses: actions/upload-artifact@v4

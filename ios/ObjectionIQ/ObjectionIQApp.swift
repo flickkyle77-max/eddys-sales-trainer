@@ -13,7 +13,13 @@ struct ObjectionIQApp: App {
         WindowGroup {
             Group {
                 if let server {
+                    #if DEBUG
+                    if let mode = ProcessInfo.processInfo.arguments.first(where: { $0.hasPrefix("-ui-preview=") })?.split(separator: "=").last {
+                        NativePreview(mode: String(mode))
+                    } else { TrainingView(server: server) }
+                    #else
                     TrainingView(server: server)
+                    #endif
                 } else {
                     VStack(spacing: 16) {
                         Image(systemName: "exclamationmark.triangle").font(.largeTitle)
