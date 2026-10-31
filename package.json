@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "node server.mjs",
-    "check": "node --check server.mjs && node --check objections.mjs && node --check public/app.js && node --check public/text-hub.js && node --check public/objection-hub.js",
+    "check": "node --check server.mjs && node --check objections.mjs && node --check public/app.js && node --check public/text-hub.js && node --check public/objection-hub.js && node --check public/phone-media.js",
     "test": "node --test tests/*.test.mjs"
   },
   "engines": {

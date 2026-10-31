@@ -1,5 +1,9 @@
 # ObjectionIQ
 
+## Native iPhone/iPad application
+
+Open `ios/ObjectionIQ.xcodeproj` on branch `codex/native-ios-rebuild`. The app has native SwiftUI sign-in, training, chat, reviews and progress, plus a native WebRTC call screen. Start with `TESTFLIGHT-START-HERE.md` and `ios/README.md`. The GitHub Native iOS build check compiles against the iOS SDK; physical-device audio acceptance, signing, and TestFlight upload are still required.
+
 Employee training with fictional customers: live Phone Training, Text Training, and Objection Lab. Employees sign in through Supabase Auth. Scores and reviews are saved to each employee's Supabase history.
 
 ## Objection Lab

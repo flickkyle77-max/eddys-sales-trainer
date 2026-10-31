@@ -3,14 +3,15 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import {JSDOM} from 'jsdom';
 import {createObjectionService,rubric} from '../objections.mjs';
+import {assertMicrophoneSupport,microphoneErrorMessage} from '../public/phone-media.js';
 const html=await fs.readFile(new URL('../public/index.html',import.meta.url),'utf8');
 const source=await Promise.all(['text-hub.js','objection-hub.js','app.js'].map(p=>fs.readFile(new URL('../public/'+p,import.meta.url),'utf8')));
 const tick=()=>new Promise(r=>setImmediate(r));
 async function setup(){
- const dom=new JSDOM(html,{url:'https://trainer.test',runScripts:'outside-only',pretendToBeVisual:true});const w=dom.window;const records=[];let user='a',failPath='',hold=null;
- w.HTMLElement.prototype.scrollIntoView=function(){};w.alert=()=>{};w.confirm=()=>true;
+ const dom=new JSDOM(html,{url:'https://trainer.test',runScripts:'outside-only',pretendToBeVisual:true});const w=dom.window;const alerts=[];const requested=[];const records=[];let user='a',failPath='',hold=null;
+ w.HTMLElement.prototype.scrollIntoView=function(){};w.alert=message=>alerts.push(message);w.confirm=()=>true;w.assertMicrophoneSupport=assertMicrophoneSupport;w.microphoneErrorMessage=microphoneErrorMessage;Object.defineProperty(w,'isSecureContext',{value:true,configurable:true});
  const service=createObjectionService({secret:'ui-test-only',async ai(instructions,payload,schema){if(schema.properties.reply)return {reply:payload.language==='es'?'Quiero comparar el precio total.':'I want to compare total prices.'};if(schema.properties.assessment)return {assessment:'Listen first.',question:'Which offer?',suggestion:'Which offer are you comparing?',reason:'Find the concern.'};return {scores:Object.fromEntries(Object.keys(rubric).map(k=>[k,5])),feedback:Object.fromEntries(Object.keys(rubric).map(k=>[k,{evidence:'You asked a question.',advice:'Explore further.'}])),outcome:'No appointment yet.',strength:'Listened.',improvement:'Explore.',example:'What matters most?',real_concern:'Price comparison.',next_drill:'Compare offers.'};},async save(r){records.push({...r,created_at:new Date().toISOString()});},async find(id){return records.find(r=>r.id===id);}});
- w.fetch=async(url,options={})=>{const path=String(url);if(hold&&path===hold.path)return hold.promise;if(path===failPath)return {ok:false,json:async()=>({error:'Temporary test failure'})};const body=options.body?JSON.parse(options.body):{};let value;
+ w.fetch=async(url,options={})=>{const path=String(url);requested.push(path);if(hold&&path===hold.path)return hold.promise;if(path===failPath)return {ok:false,json:async()=>({error:'Temporary test failure'})};const body=options.body?JSON.parse(options.body):{};let value;
  if(path==='/api/me')value={name:user+'@example.test'};
  else if(path==='/api/login'){user=body.email;value={name:body.email};}
  else if(path==='/api/logout')value={ok:true};
@@ -25,7 +26,7 @@ async function setup(){
  w.eval('(function(){const {registerTrainingArea,switchArea}=window.__hub;'+source[1].replace(/^import .*;\n/,'')+'})()');
  w.eval('(function(){'+source[2].replace(/^import .*;$/gm,'')+'})()');await tick();await tick();
  const $=id=>w.document.getElementById(id);const click=async id=>{const result=$(id).onclick?.();await result;await tick();};
- return {dom,w,$,click,records,set fail(v){failPath=v;},set hold(v){hold=v;}};
+ return {dom,w,$,click,records,alerts,requested,set fail(v){failPath=v;},set hold(v){hold=v;}};
 }
 test('hub shows after login; Phone Training reveals setup only',async t=>{const f=await setup();t.after(()=>f.dom.window.close());assert.equal(f.$('hubHome').hidden,false);await f.click('hubGoPhone');assert.equal(f.$('setup').hidden,false);assert.equal(f.$('call').hidden,true);assert.equal(f.$('results').hidden,true);assert.equal(f.$('logout').closest('.intro'),null);});
 test('Objection Lab loads all twelve topics and keeps account controls visible',async t=>{const f=await setup();t.after(()=>f.dom.window.close());await f.click('hubGoObjection');assert.equal(f.$('objectionLab').hidden,false);assert.equal(f.$('obTopic').options.length,13);assert.equal(f.$('obStart').disabled,false);assert.equal(f.$('setup').hidden,true);});
@@ -36,3 +37,6 @@ test('legacy text errors persist and failed scoring can retry',async t=>{const f
 test('logout clears objection transcripts, drafts, reviews, and history',async t=>{const f=await setup();t.after(()=>f.dom.window.close());await f.click('hubGoObjection');await f.click('obStart');f.$('obDraft').value='Private unfinished draft';await f.click('logout');assert.equal(f.$('obMessages').textContent,'');assert.equal(f.$('obDraft').value,'');assert.equal(f.$('obHistory').textContent,'');assert.equal(f.$('app').hidden,true);});
 test('late objection response cannot repopulate a signed-out screen',async t=>{const f=await setup();t.after(()=>f.dom.window.close());await f.click('hubGoObjection');await f.click('obStart');let release;const promise=new Promise(r=>release=r);f.hold={path:'/api/objections/reply',promise};f.$('obDraft').value='Question';const pending=f.click('obSend');await tick();await f.click('logout');release({ok:true,json:async()=>({messages:[{role:'customer',text:'Previous employee secret'}]})});await pending;assert.equal(f.$('obMessages').textContent,'');assert.equal(f.$('obDraft').value,'');});
 test('transcript HTML is escaped',async t=>{const f=await setup();t.after(()=>f.dom.window.close());await f.click('hubGoObjection');await f.click('obStart');f.$('obDraft').value='<img src=x onerror=alert(1)>';await f.click('obSend');assert.equal(f.$('obMessages').querySelector('img'),null);assert.match(f.$('obMessages').textContent,/<img/);});
+
+test('microphone rejection stays local and gives permission recovery advice',async t=>{const f=await setup();t.after(()=>f.dom.window.close());Object.defineProperty(f.w.navigator,'mediaDevices',{value:{async getUserMedia(){throw new f.w.DOMException('Platform denied access','NotAllowedError');}}});await f.click('hubGoPhone');await f.click('start');assert.equal(f.$('setup').hidden,false);assert.equal(f.$('call').hidden,true);assert.match(f.alerts.at(-1),/device blocked microphone/);assert(!f.requested.includes('/api/session'));});
+test('an insecure document cannot start microphone capture or a voice session',async t=>{const f=await setup();t.after(()=>f.dom.window.close());Object.defineProperty(f.w,'isSecureContext',{value:false,configurable:true});let called=false;Object.defineProperty(f.w.navigator,'mediaDevices',{value:{async getUserMedia(){called=true;}}});await f.click('hubGoPhone');await f.click('start');assert.equal(called,false);assert.match(f.alerts.at(-1),/secure HTTPS/);assert(!f.requested.includes('/api/session'));});

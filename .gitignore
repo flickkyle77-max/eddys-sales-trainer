@@ -4,3 +4,16 @@ node_modules/
 !.env.example
 .DS_Store
 coverage/
+
+# Local build artifacts and signing files
+work/
+outputs/
+.build/
+.swiftpm/
+DerivedData/
+*.xcarchive
+*.ipa
+*.mobileprovision
+*.p12
+xcuserdata/
+node_modules
