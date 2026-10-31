@@ -37,16 +37,17 @@ function handleEvent(ev){let d;try{d=JSON.parse(ev.data)}catch{return}
  if(d.type==='conversation.item.created'&&d.item?.role==='assistant'&&d.item?.content){const content=d.item.content.map(c=>c.transcript||c.text||'').join(' ');if(content)addTurn(d.item.id,'Customer',content)}
  if(d.type==='error')console.warn('Realtime event error',d.error);
 }
-async function start(){if(active)return;$('start').disabled=true;items=new Map();turns=[];renderTranscript();setPanel('call');text('callScenario',scenarios.find(x=>x[0]===scenario)[2]);text('connectionStatus','Connecting microphone...');customerSpeaking=false;userMuted=false;
+async function start(){if(active)return;$('start').disabled=true;items=new Map();turns=[];renderTranscript();setPanel('call');text('callScenario',scenarios.find(x=>x[0]===scenario)[2]);text('connectionStatus','Connecting microphone...');customerSpeaking=false;userMuted=false;let microphoneReady=false;
  try{
- localStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
+ assertMicrophoneSupport({secureContext:window.isSecureContext,mediaDevices:navigator.mediaDevices});
+ localStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});microphoneReady=true;
  pc=new RTCPeerConnection();localStream.getTracks().forEach(track=>pc.addTrack(track,localStream));pc.ontrack=e=>{$('remoteAudio').srcObject=e.streams[0];$('remoteAudio').play().catch(()=>{})};
  dc=pc.createDataChannel('oai-events');dc.onmessage=handleEvent;dc.onopen=()=>{text('connectionStatus','Customer connected — your turn to speak');active=true;startTime=Date.now();timerInterval=setInterval(()=>{const t=Math.floor((Date.now()-startTime)/1000);text('timer',`${String(Math.floor(t/60)).padStart(2,'0')}:${String(t%60).padStart(2,'0')}`)},1000)};
  pc.onconnectionstatechange=()=>{if(['failed','disconnected'].includes(pc.connectionState)&&!finishing)text('connectionStatus','Connection interrupted — you may end and score')};
  const offer=await pc.createOffer();await pc.setLocalDescription(offer);
  if(pc.iceGatheringState!=='complete')await new Promise((resolve,reject)=>{const timeout=setTimeout(()=>reject(Error('Microphone connection timed out')),10000);pc.onicegatheringstatechange=()=>{if(pc.iceGatheringState==='complete'){clearTimeout(timeout);resolve()}}});
  const r=await fetch('/api/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sdp:pc.localDescription.sdp,scenario,difficulty,language})});if(!r.ok){const d=await r.json().catch(()=>({}));throw Error(d.error||'Voice setup failed')};const sdp=await r.text();await pc.setRemoteDescription({type:'answer',sdp});
- }catch(e){cleanup();setPanel('setup');error(e)}finally{$('start').disabled=false}}
+ }catch(e){cleanup();setPanel('setup');error(microphoneReady?e:microphoneErrorMessage(e))}finally{$('start').disabled=false}}
 function cleanup(){clearInterval(timerInterval);clearTimeout(unmuteDelay);if(dc&&dc.readyState==='open')dc.close();if(pc)pc.close();if(localStream)localStream.getTracks().forEach(x=>x.stop());$('remoteAudio').srcObject=null;active=false;pc=null;dc=null;localStream=null;customerSpeaking=false;userMuted=false}
 async function finish(doScore=true){if(finishing)return;const generation=authGeneration;finishing=true;text('connectionStatus','Finishing call...');if(dc?.readyState==='open'){try{dc.send(JSON.stringify({type:'session.close'}))}catch{}}await new Promise(r=>setTimeout(r,1400));cleanup();if(!doScore){finishing=false;return}setPanel('results');text('totalScore','…');text('outcome','Reviewing your conversation...');$('scoreRows').innerHTML='';text('strength','');text('improvement','');text('example','');text('scoreNotes','');
  try{const r=await fetch('/api/score',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({transcript:turns,scenario,difficulty,language})});const d=await r.json();if(generation!==authGeneration)return;if(!r.ok)throw Error(d.error||'Scoring failed');showScore(d);if(d.save_warning)text('scoreNotes',`${d.notes} ${d.save_warning}`);await renderHistory()}catch(e){text('totalScore','—');text('outcome',e.message+'. Your call transcript is displayed during the call but not stored. Try another call.')}finally{finishing=false}}
@@ -62,3 +63,5 @@ $('start').onclick=start;$('end').onclick=()=>finish(true);$('again').onclick=()
 (async()=>{try{const r=await fetch('/api/me');if(r.ok){const d=await r.json();text('userName',d.name);show('app');renderHistory()}else show('login')}catch{show('login')}})();renderChoices();addLanguagePicker();
 import './text-hub.js';
 import './objection-hub.js';
+
+import {assertMicrophoneSupport,microphoneErrorMessage} from './phone-media.js';

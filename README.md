@@ -1,5 +1,9 @@
 # ObjectionIQ
 
+## Rebuilt iPhone/iPad application
+
+The iOS project is now included at `ios/ObjectionIQ.xcodeproj`. It loads the existing secure server directly and handles microphone requests through WebKit and iOS permission checks. Start with `TESTFLIGHT-START-HERE.md` and `ios/README.md`. A new signed TestFlight build and physical-device acceptance test are required; the iOS target has not been compiled on this Command-Line-Tools-only authoring Mac.
+
 Employee training with fictional customers: live Phone Training, Text Training, and Objection Lab. Employees sign in through Supabase Auth. Scores and reviews are saved to each employee's Supabase history.
 
 ## Objection Lab
