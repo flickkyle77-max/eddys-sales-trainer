@@ -36,6 +36,7 @@ struct CallScreen: View {
                         call.stop(reason: "Another audio session interrupted this call. You can score the available transcript.")
                     }
                 }
+                .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.routeChangeNotification)) { _ in call.refreshAudioRoute() }
         }
     }
     private var liveCall: some View {
@@ -55,7 +56,7 @@ struct CallScreen: View {
                 if let error = call.error { ErrorBanner(message: error) }
                 HStack(spacing: 32) {
                     callControl(call.muted ? "Unmute" : "Mute", icon: call.muted ? "mic.slash.fill" : "mic.fill", selected: call.muted) { call.setMuted(!call.muted) }
-                    callControl(call.speaker ? "Speaker on" : "System audio", icon: call.speaker ? "speaker.wave.3.fill" : "ear", selected: call.speaker) { call.toggleSpeaker() }
+                    callControl(call.speaker ? "Speaker" : call.audioRoute, icon: call.speaker ? "speaker.wave.3.fill" : "ear", selected: call.speaker) { call.toggleSpeaker() }
                     callControl("Transcript", icon: "text.bubble", selected: false) { showTranscript = true }
                 }.disabled(call.stage != .connected || finishing)
                 if call.stage == .connected || call.stage == .ended {
@@ -81,7 +82,7 @@ struct CallScreen: View {
             VStack(spacing: 10) {
                 Image(systemName: icon).font(.title2).frame(width: 60, height: 60)
                     .background(selected ? Color.teal.opacity(0.18) : Color(uiColor: .secondarySystemGroupedBackground), in: Circle())
-                Text(title).font(.caption).multilineTextAlignment(.center)
+                Text(title).font(.caption).multilineTextAlignment(.center).lineLimit(2)
             }
         }.buttonStyle(.plain).accessibilityLabel(title)
     }

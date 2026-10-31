@@ -12,6 +12,7 @@ final class NativeCall: NSObject, ObservableObject {
     @Published var error: String?
     @Published var muted = false
     @Published var speaker = true
+    @Published var audioRoute = "Speaker"
     @Published var transcript = CallTranscript()
     @Published var review: TrainingReview?
     @Published var connectedAt: Date?
@@ -116,13 +117,27 @@ final class NativeCall: NSObject, ObservableObject {
         RTCAudioSessionConfiguration.setWebRTC(config)
         try audio.setConfiguration(config, active: true)
         audioActive = true; audio.isAudioEnabled = true
+        refreshAudioRoute()
 
     }
     func setMuted(_ value: Bool) { muted = value; microphone?.isEnabled = !value }
     func toggleSpeaker() {
         let audio = RTCAudioSession.sharedInstance(); audio.lockForConfiguration(); defer { audio.unlockForConfiguration() }
-        do { try audio.overrideOutputAudioPort(speaker ? .none : .speaker); speaker.toggle() }
+        do {
+            let useSpeaker = !speaker
+            let config = RTCAudioSessionConfiguration.webRTC()
+            config.categoryOptions = useSpeaker ? [.allowBluetooth, .defaultToSpeaker] : [.allowBluetooth]
+            RTCAudioSessionConfiguration.setWebRTC(config)
+            try audio.setConfiguration(config)
+            try audio.overrideOutputAudioPort(useSpeaker ? .speaker : .none)
+            refreshAudioRoute()
+        }
         catch { self.error = "Could not change the audio route. Check your headphones or Bluetooth connection." }
+    }
+    func refreshAudioRoute() {
+        let output = AVAudioSession.sharedInstance().currentRoute.outputs.first
+        speaker = output?.portType == .builtInSpeaker
+        audioRoute = output?.portName ?? "System audio"
     }
     func stop(reason: String? = nil) {
         generation = UUID(); timeout?.cancel(); timeout = nil
