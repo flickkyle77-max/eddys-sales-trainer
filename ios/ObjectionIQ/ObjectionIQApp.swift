@@ -25,7 +25,6 @@ struct ObjectionIQApp: App {
                     .padding(28)
                 }
             }
-            .preferredColorScheme(.dark)
         }
     }
 }

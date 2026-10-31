@@ -1,11 +1,13 @@
-# ObjectionIQ — rebuilt iPhone/iPad source
+# Build the native ObjectionIQ app
 
-Open **ios/ObjectionIQ.xcodeproj** in full Xcode. The complete rebuild instructions are in **ios/README.md**.
+Use branch **codex/native-ios-rebuild**, then open **ios/ObjectionIQ.xcodeproj**.
 
-This package now includes an actual iOS project alongside the web application and Node server. The app is preconfigured to open the current secure training server and includes explicit web-view microphone handling. It preserves the existing Phone, Text, and Objection training features.
+This branch now contains native SwiftUI screens and native WebRTC calls, replacing the previous website wrapper. Use the latest commit, not the old ZIP or a downloaded earlier revision.
 
-The developer must select the owner's Apple signing team, use the existing App Store Connect bundle identifier, set an unused build number, compile the iOS app, and test a real call on an iPhone/iPad before uploading the new TestFlight build. The included bundle identifier is a placeholder. No signed build is included, and the previous TestFlight app will not update merely because these source files are in GitHub.
+1. Read `ios/README.md`.
+2. Verify the GitHub **Native iOS build** check passes for the current commit.
+3. Set the existing Apple Developer team, App Store Connect bundle ID, and an unused higher build number.
+4. Build and test on physical iPhone/iPad, including microphone, audio routing, sign-in, practice, scoring, and history.
+5. Archive, validate, and upload to the existing TestFlight app record.
 
-Validation available here: all web syntax checks, 35 automated web/service tests, Swift source syntax checks, Xcode/plist structural checks, and 31 passing checks in the dependency-free Swift permission-policy checker. Full Xcode/iOS SDK compilation and device microphone verification remain outstanding.
-
-No secrets, employee records, installed dependencies, or Apple signing credentials are included. Use `.env.example` only when setting up a separate backend; existing hosted configuration does not need to be replaced for this iOS rebuild.
+The source is not a signed IPA. Full simulator compilation is an automated gate; actual audio/device acceptance and TestFlight signing/upload still belong to the builder.
