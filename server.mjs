@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import crypto from 'node:crypto';
 import {createObjectionService,registerObjectionRoutes} from './objections.mjs';
+import {createMarketplaceService,registerMarketplaceRoutes} from './marketplace.mjs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 const app = express();
@@ -21,6 +22,7 @@ if(!supabaseUrl.startsWith('https://')||!supabaseKey)console.warn('Supabase not 
 const limiter=rateLimit({windowMs:15*60*1000,limit:20,standardHeaders:'draft-7',legacyHeaders:false});
 const callsLimiter=rateLimit({windowMs:60*60*1000,limit:150,keyGenerator:req=>req.userId,standardHeaders:'draft-7',legacyHeaders:false,message:{error:'Hourly practice limit reached. Please try again later.'}});
 const objectionLimiter=rateLimit({windowMs:60*60*1000,limit:120,keyGenerator:req=>req.userId,standardHeaders:'draft-7',legacyHeaders:false,message:{error:'Hourly objection practice limit reached. Please try again later.'}});
+const marketplaceLimiter=rateLimit({windowMs:60*60*1000,limit:100,keyGenerator:req=>req.userId,standardHeaders:'draft-7',legacyHeaders:false,message:{error:'Hourly Marketplace practice limit reached. Please try again later.'}});
 const cookieOptions={httpOnly:true,secure:process.env.NODE_ENV==='production',sameSite:'strict',path:'/'};
 const cookie=(req,name)=>(req.headers.cookie||'').split(';').map(x=>x.trim()).find(x=>x.startsWith(name+'='))?.slice(name.length+1);
 const authHeaders=(token)=>({'apikey':supabaseKey,'Authorization':`Bearer ${token}`});
@@ -175,7 +177,7 @@ app.post('/api/text/finish',requireAuth,callsLimiter,async(req,res)=>{
  }catch(e){console.error('Text score:',e.message);res.status(502).json({error:'Could not complete text evaluation'})}
 });
 app.get('/api/text/history',requireAuth,async(req,res)=>{
- try{const r=await fetch(`${supabaseUrl}/rest/v1/text_sessions?user_id=eq.${encodeURIComponent(req.userId)}&select=id,created_at,scenario,difficulty,language,mode,total_score,scores,outcome,strength,improvement,example,conversation&order=created_at.desc&limit=30`,{headers:authHeaders(req.authToken)});if(!r.ok)throw Error(`Supabase ${r.status}`);res.json(await r.json())}catch(e){console.error('Text history',e);res.status(502).json({error:'Could not load text sessions'})}
+ try{const r=await fetch(`${supabaseUrl}/rest/v1/text_sessions?user_id=eq.${encodeURIComponent(req.userId)}&scenario=not.like.marketplace_*&select=id,created_at,scenario,difficulty,language,mode,total_score,scores,outcome,strength,improvement,example,conversation&order=created_at.desc&limit=30`,{headers:authHeaders(req.authToken)});if(!r.ok)throw Error(`Supabase ${r.status}`);res.json(await r.json())}catch(e){console.error('Text history',e);res.status(502).json({error:'Could not load text sessions'})}
 });
 
 // Reuse the existing text_sessions table and its employee ownership policies.
@@ -193,6 +195,22 @@ const objectionService=createObjectionService({secret:sessionSecret,ai:textAI,
  }
 });
 registerObjectionRoutes(app,{requireAuth,limiter:objectionLimiter,service:objectionService});
+const marketplaceService=createMarketplaceService({secret:sessionSecret,ai:textAI,
+ async find(id,userId,token){
+  const r=await fetch(`${supabaseUrl}/rest/v1/text_sessions?id=eq.${id}&user_id=eq.${encodeURIComponent(userId)}&select=*&limit=1`,{headers:authHeaders(token),signal:AbortSignal.timeout(15000)});
+  if(!r.ok)throw Error('Unable to check saved Marketplace review');return (await r.json())[0]||null;
+ },
+ async save(record,token){
+  const r=await fetch(`${supabaseUrl}/rest/v1/text_sessions`,{method:'POST',headers:{...authHeaders(token),'Content-Type':'application/json','Prefer':'resolution=ignore-duplicates,return=minimal'},body:JSON.stringify(record),signal:AbortSignal.timeout(15000)});
+  if(!r.ok)throw Error('Unable to save Marketplace review');
+ }
+});
+registerMarketplaceRoutes(app,{requireAuth,limiter:marketplaceLimiter,service:marketplaceService,
+ async history(userId,token){
+  const r=await fetch(`${supabaseUrl}/rest/v1/text_sessions?user_id=eq.${encodeURIComponent(userId)}&scenario=like.marketplace_*&select=*&order=created_at.desc&limit=30`,{headers:authHeaders(token),signal:AbortSignal.timeout(15000)});
+  if(!r.ok)throw Error('Unable to load Marketplace history');return r.json();
+ }
+});
 const port=Number(process.env.PORT)||3000;
 export {app};
 if(process.argv[1]===fileURLToPath(import.meta.url))app.listen(port,()=>console.log(`ObjectionIQ available at http://localhost:${port}`));

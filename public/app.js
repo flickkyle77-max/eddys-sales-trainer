@@ -62,3 +62,4 @@ $('start').onclick=start;$('end').onclick=()=>finish(true);$('again').onclick=()
 (async()=>{try{const r=await fetch('/api/me');if(r.ok){const d=await r.json();text('userName',d.name);show('app');renderHistory()}else show('login')}catch{show('login')}})();renderChoices();addLanguagePicker();
 import './text-hub.js';
 import './objection-hub.js';
+import './marketplace-hub.js';

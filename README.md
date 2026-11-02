@@ -1,5 +1,10 @@
 # ObjectionIQ
 
+## Marketplace Training
+
+Choose **Marketplace Training** from the main menu for fictional vehicle inquiries, private manager pricing decisions, context-aware coaching, and saved reviews. See [MARKETPLACE-WEB-RELEASE.md](MARKETPLACE-WEB-RELEASE.md) for implementation and validation details.
+
+
 Employee training with fictional customers: live Phone Training, Text Training, and Objection Lab. Employees sign in through Supabase Auth. Scores and reviews are saved to each employee's Supabase history.
 
 ## Objection Lab
